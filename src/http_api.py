@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
-from urllib.parse import parse_qs, urlparse
+from typing import Any, Dict, Tuple
+from urllib.parse import urlparse
 
 from .domain import (ConflictError, DomainError, NotFoundError, PermissionDenied,
                      ValidationError)
@@ -15,7 +15,7 @@ def make_handler(service: Service, static_dir: str):
     root = Path(static_dir)
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "ModularHell/1.0"
+        server_version = "RecoverableBatch/1.0"
 
         def log_message(self, fmt: str, *args: Any) -> None:
             return
@@ -84,11 +84,26 @@ def make_handler(service: Service, static_dir: str):
                     actor, role = self._identity()
                     del actor
                     self._json(200, {"items": service.list_items(role)})
+                elif path == "/api/operations/recover":
+                    actor, role = self._identity()
+                    del actor
+                    results = service.recover_operations(role)
+                    self._json(200, {"recovered": results})
+                elif path.startswith("/api/operations/"):
+                    op_id = path.rsplit("/", 1)[-1]
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, service.get_operation(op_id, role))
                 elif path.startswith("/api/items/") and path.endswith("/records"):
                     item_id = int(path.split("/")[3])
                     actor, role = self._identity()
                     del actor
                     self._json(200, {"records": service.list_records(item_id, role)})
+                elif path.startswith("/api/items/") and path.endswith("/batches"):
+                    item_id = int(path.split("/")[3])
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, {"batches": service.list_batches(item_id, role)})
                 elif path.startswith("/api/items/"):
                     item_id = int(path.rsplit("/", 1)[-1])
                     actor, role = self._identity()
@@ -113,12 +128,37 @@ def make_handler(service: Service, static_dir: str):
                 elif path.startswith("/api/items/") and path.endswith("/records"):
                     item_id = int(path.split("/")[3])
                     self._json(201, service.add_record(item_id, body, actor, role))
+                elif path.startswith("/api/items/") and path.endswith("/basis"):
+                    item_id = int(path.split("/")[3])
+                    self._json(200, service.update_basis(item_id, body, actor, role))
                 elif path.startswith("/api/items/") and path.endswith("/transition"):
                     item_id = int(path.split("/")[3])
-                    target = body.get("target")
-                    expected = body.get("expected_version")
                     self._json(200, service.transition(
-                        item_id, target, expected, actor, role))
+                        item_id, body.get("target"), body.get("expected_version"),
+                        actor, role, body.get("op_id"), body.get("basis_version"),
+                        body.get("traffic_notice_no")))
+                elif path.startswith("/api/items/") and path.endswith("/recover"):
+                    item_id = int(path.split("/")[3])
+                    results = service.recover_operations(role, body.get("op_id"))
+                    del item_id
+                    self._json(200, {"recovered": results})
+                else:
+                    self._json(404, {"error": "not_found"})
+            except Exception as exc:
+                self._send_error(exc)
+
+        def do_PATCH(self) -> None:
+            try:
+                path = urlparse(self.path).path
+                actor, role = self._identity()
+                body = self._body()
+                parts = path.strip("/").split("/")
+                # /api/items/{id}/records/{rid}/review
+                if (len(parts) == 6 and parts[:2] == ["api", "items"]
+                        and parts[3] == "records" and parts[5] == "review"):
+                    item_id = int(parts[2]); record_id = int(parts[4])
+                    self._json(200, service.review_pending_record(
+                        item_id, record_id, body, actor, role))
                 else:
                     self._json(404, {"error": "not_found"})
             except Exception as exc:

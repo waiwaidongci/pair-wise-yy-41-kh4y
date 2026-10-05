@@ -118,7 +118,13 @@ def make_handler(service: Service, static_dir: str):
                     target = body.get("target")
                     expected = body.get("expected_version")
                     self._json(200, service.transition(
-                        item_id, target, expected, actor, role))
+                        item_id, target, expected, actor, role,
+                        operation_no=body.get("operation_no"),
+                        basis_version=body.get("basis_version"),
+                        traffic_notice_no=body.get("traffic_notice_no")))
+                elif path.startswith("/api/items/") and path.endswith("/basis"):
+                    item_id = int(path.split("/")[3])
+                    self._json(200, service.update_basis(item_id, body, actor, role))
                 else:
                     self._json(404, {"error": "not_found"})
             except Exception as exc:

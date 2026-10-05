@@ -20,6 +20,10 @@ class Record:
 @dataclass(frozen=True)
 class AuditEntry:
     id:int; action:str; entity_type:str; entity_id:int; actor:str; detail:Dict[str,Any]; previous_hash:str; entry_hash:str; created_at:str
+@dataclass(frozen=True)
+class Operation:
+    """可恢复批次：把告警、处置记录和审计事件串成一次可幂等重放、可从检查点恢复的提交。"""
+    id:int; operation_no:str; item_id:Optional[int]; action:str; basis_version:Optional[int]; traffic_notice_no:Optional[str]; status:str; stage:str; request:Dict[str,Any]; basis_snapshot:Optional[Dict[str,Any]]; result:Optional[Dict[str,Any]]; error:Optional[str]; created_by:str; created_at:str; updated_at:str
 def require_text(value,field,max_length=2000):
     if not isinstance(value,str) or not value.strip(): raise ValidationError(f"{field}不能为空")
     value=value.strip()
